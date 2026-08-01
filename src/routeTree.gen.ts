@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as ScriptsScriptIdRouteImport } from './routes/scripts.$scriptId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -29,6 +30,11 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ScriptsScriptIdRoute = ScriptsScriptIdRouteImport.update({
   id: '/scripts/$scriptId',
   path: '/scripts/$scriptId',
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/dashboard': typeof DashboardRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/scripts/$scriptId': typeof ScriptsScriptIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/dashboard': typeof DashboardRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/scripts/$scriptId': typeof ScriptsScriptIdRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,29 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/dashboard': typeof DashboardRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/scripts/$scriptId': typeof ScriptsScriptIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/dashboard' | '/scripts/$scriptId'
+  fullPaths:
+    '/' | '/admin' | '/dashboard' | '/verify-email' | '/scripts/$scriptId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/dashboard' | '/scripts/$scriptId'
-  id: '__root__' | '/' | '/admin' | '/dashboard' | '/scripts/$scriptId'
+  to: '/' | '/admin' | '/dashboard' | '/verify-email' | '/scripts/$scriptId'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/dashboard'
+    | '/verify-email'
+    | '/scripts/$scriptId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   DashboardRoute: typeof DashboardRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
   ScriptsScriptIdRoute: typeof ScriptsScriptIdRoute
 }
 
@@ -92,6 +109,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/scripts/$scriptId': {
       id: '/scripts/$scriptId'
       path: '/scripts/$scriptId'
@@ -106,6 +130,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   DashboardRoute: DashboardRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
   ScriptsScriptIdRoute: ScriptsScriptIdRoute,
 }
 export const routeTree = rootRouteImport

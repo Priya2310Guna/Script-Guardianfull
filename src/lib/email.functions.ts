@@ -64,3 +64,37 @@ export const sendVerificationEmail = createServerFn({ method: "POST" })
 
     return { sent: true as const };
   });
+
+export const sendHRConfirmationEmail = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ hrEmail: z.string().email(), applicantName: z.string() }).parse(data))
+  .handler(async ({ data }) => {
+    const lovableKey = process.env.LOVABLE_API_KEY;
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!lovableKey || !resendKey) {
+      return { sent: false as const, reason: "not_configured" as const };
+    }
+
+    const from = process.env.VAULT_EMAIL_FROM ?? "Script Vault <onboarding@resend.dev>";
+
+    const res = await fetch(`${GATEWAY_URL}/emails`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${lovableKey}`,
+        "X-Connection-Api-Key": resendKey,
+      },
+      body: JSON.stringify({
+        from,
+        to: [data.hrEmail],
+        subject: `Access Verified by ${data.applicantName}`,
+        html: `<p>The access request for ${data.applicantName} has been verified and completed successfully.</p>`,
+        text: `The access request for ${data.applicantName} has been verified and completed successfully.`,
+      }),
+    });
+
+    if (!res.ok) {
+      return { sent: false as const, reason: "provider_error" as const };
+    }
+
+    return { sent: true as const };
+  });

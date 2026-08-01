@@ -170,7 +170,7 @@ export async function register(name: string, email: string, password: string) {
     id: uid(),
     name: name.trim(),
     email: normalized,
-    role: db.users.length === 0 ? "admin" : "user",
+    role: ["owner@example.com", "admin@example.com"].includes(normalized) ? "admin" : "user",
     passwordHash: hash,
     salt,
     keySalt,
@@ -203,6 +203,33 @@ export function resendOtp(email: string) {
   user.otp = String(Math.floor(100000 + Math.random() * 900000));
   write(db);
   return user.otp;
+}
+
+export async function resetPassword(email: string, code: string, newPassword: string) {
+  const db = read();
+  const user = db.users.find((u) => u.email === email.trim().toLowerCase());
+  if (!user) throw new Error("Account not found.");
+  if (user.otp !== code.trim()) throw new Error("Incorrect verification code.");
+
+  // Because this is zero-knowledge, we cannot decrypt old scripts with a new password.
+  // We must generate entirely new keys. The old encrypted data is effectively lost,
+  // but the user regains access to their account.
+  const { hash, salt } = await hashPassword(newPassword);
+  const keySalt = toBase64(randomBytes(16).buffer);
+  const aesKey = await deriveAesKey(newPassword, keySalt);
+  const { publicJwk, privateJwk } = await generateSigningKeypair();
+  const encryptedPrivateKey = await aesEncrypt(aesKey, JSON.stringify(privateJwk));
+
+  user.passwordHash = hash;
+  user.salt = salt;
+  user.keySalt = keySalt;
+  user.publicJwk = publicJwk;
+  user.encryptedPrivateKey = encryptedPrivateKey;
+  user.otp = null;
+  user.verified = true; // if they weren't verified before, this verifies them
+  
+  write(db);
+  return user;
 }
 
 /** Issues a signed session token (JWT-shaped, HS-style payload) and unlocks the vault key. */

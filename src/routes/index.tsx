@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VaultHeader } from "@/components/vault/VaultHeader";
 import { useVaultSession } from "@/hooks/use-vault-session";
 import { sendVerificationEmail } from "@/lib/email.functions";
-import { login, register, resendOtp, verifyEmail } from "@/lib/vault/store";
+import { login, register, resendOtp, verifyEmail, resetPassword } from "@/lib/vault/store";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -205,6 +205,39 @@ function AuthPanel() {
     }
   }
 
+  async function handleResetRequest(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    setBusy(true);
+    try {
+      const email = String(f.get("email"));
+      const code = resendOtp(email);
+      setPendingEmail(email);
+      setPendingCode(code);
+      setTab("reset-confirm");
+      await deliverCode(email, code);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleResetConfirm(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    setBusy(true);
+    try {
+      await resetPassword(pendingEmail, String(f.get("code")), String(f.get("password")));
+      toast.success("Password reset successfully. Sign in with your new password.");
+      setTab("signin");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="vault-surface h-fit rounded-xl border border-border/70 p-7">
       <Tabs value={tab} onValueChange={setTab}>
@@ -224,6 +257,15 @@ function AuthPanel() {
             <p className="text-center text-xs text-muted-foreground">
               Your passphrase derives the decryption key — it is never stored.
             </p>
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                onClick={() => setTab("reset-request")}
+                className="text-xs text-muted-foreground underline-offset-4 hover:underline"
+              >
+                Forgot passphrase?
+              </button>
+            </div>
           </form>
         </TabsContent>
 
@@ -310,6 +352,72 @@ function AuthPanel() {
             </button>
           </form>
         </TabsContent>
+
+        <TabsContent value="reset-request" className="mt-6">
+          <div className="mb-5 rounded-lg border border-warning/40 bg-warning/5 p-4 text-warning">
+            <p className="text-xs font-semibold uppercase tracking-wider">Warning: Data Loss</p>
+            <p className="mt-2 text-xs leading-relaxed">
+              Script Vault uses zero-knowledge encryption. Resetting your passphrase will generate a new encryption key, which means <strong>you will permanently lose access to all previously encrypted scripts</strong>.
+            </p>
+          </div>
+          <form onSubmit={handleResetRequest} className="space-y-4">
+            <Field label="Account Email" name="email" type="email" placeholder="you@studio.com" />
+            <Button type="submit" variant="destructive" className="w-full" disabled={busy}>
+              Send Reset Code
+            </Button>
+            <button
+              type="button"
+              className="w-full text-center text-xs text-muted-foreground hover:underline"
+              onClick={() => setTab("signin")}
+            >
+              Cancel
+            </button>
+          </form>
+        </TabsContent>
+
+        <TabsContent value="reset-confirm" className="mt-6">
+          <div className="mb-5 rounded-lg border border-primary/40 bg-primary/5 p-4">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground">
+              {delivered ? "Reset code sent" : "Your reset code"}
+            </p>
+            {delivered ? (
+              <p className="mt-2 text-sm leading-relaxed text-foreground">
+                Check <span className="font-mono text-primary">{pendingEmail}</span> for a 6-digit code.
+              </p>
+            ) : (
+              <p className="mt-2 font-mono text-2xl tracking-[0.4em] text-primary">
+                {pendingCode ?? "— — — — — —"}
+              </p>
+            )}
+          </div>
+          <form onSubmit={handleResetConfirm} className="space-y-4">
+            <Field
+              label="6-digit code"
+              name="code"
+              placeholder="000000"
+              inputMode="numeric"
+              defaultValue={delivered ? "" : (pendingCode ?? "")}
+            />
+            <Field
+              label="New Passphrase"
+              name="password"
+              type="password"
+              placeholder="At least 8 characters"
+              minLength={8}
+            />
+            <Button type="submit" variant="destructive" className="w-full" disabled={busy}>
+              Confirm Password Reset
+            </Button>
+            <button
+              type="button"
+              className="w-full text-center text-xs text-muted-foreground hover:underline"
+              onClick={() => setTab("signin")}
+            >
+              Cancel
+            </button>
+          </form>
+        </TabsContent>
+
       </Tabs>
     </div>
   );
