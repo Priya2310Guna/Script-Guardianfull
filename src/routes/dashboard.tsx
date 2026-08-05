@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { FileText, Loader2, ShieldCheck, Sparkles, Upload } from "lucide-react";
+import { FileText, Loader2, ShieldCheck, Sparkles, Upload, Users, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -24,6 +25,9 @@ import {
   isUnlocked,
   listMyScripts,
   subscribe,
+  updatePrivacySettings,
+  updateProfileInfo,
+  type VaultUser,
   type AnalysisResult,
 } from "@/lib/vault/store";
 import { reviewNarrative } from "@/lib/ai.functions";
@@ -137,8 +141,119 @@ function Dashboard() {
             </div>
           </section>
         </div>
+        
+        <ProfileSettingsPanel user={user} />
+        <PrivacySettingsPanel user={user} />
       </main>
     </div>
+  );
+}
+
+function ProfileSettingsPanel({ user }: { user: VaultUser }) {
+  const [profession, setProfession] = useState(user.profileInfo?.profession ?? "");
+  const [location, setLocation] = useState(user.profileInfo?.location ?? "");
+  const [bio, setBio] = useState(user.profileInfo?.bio ?? "");
+  
+  function saveProfile(e: React.FormEvent) {
+    e.preventDefault();
+    updateProfileInfo({ profession, location, bio });
+    toast.success("Profile information updated");
+  }
+
+  return (
+    <section className="mt-12 rounded-xl border border-border/70 bg-card p-7">
+      <h2 className="flex items-center gap-2 text-xl mb-6">
+        <Users className="size-4 text-primary" /> Public Profile Settings
+      </h2>
+      <form onSubmit={saveProfile} className="space-y-4 max-w-2xl">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="profession">Profession / Title</Label>
+            <Input id="profession" value={profession} onChange={e => setProfession(e.target.value)} placeholder="e.g. Writer / Director" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="location">Location</Label>
+            <Input id="location" value={location} onChange={e => setLocation(e.target.value)} placeholder="e.g. Los Angeles, CA" />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="bio">Bio</Label>
+          <Textarea id="bio" value={bio} onChange={e => setBio(e.target.value)} placeholder="Tell others about yourself..." rows={4} />
+        </div>
+        <Button type="submit">Save Profile</Button>
+      </form>
+    </section>
+  );
+}
+
+function PrivacySettingsPanel({ user }: { user: VaultUser }) {
+  const [anon, setAnon] = useState(user.privacySettings?.anonymousMode ?? false);
+  const [noNotif, setNoNotif] = useState(user.privacySettings?.disableNotifications ?? false);
+  const [showScripts, setShowScripts] = useState(user.privacySettings?.showScriptsOnProfile ?? false);
+
+  function saveSettings(a: boolean, n: boolean, s: boolean) {
+    updatePrivacySettings({ anonymousMode: a, disableNotifications: n, showScriptsOnProfile: s });
+    toast.success("Privacy settings updated");
+  }
+
+  return (
+    <section className="mt-12 rounded-xl border border-border/70 bg-card p-7">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="flex items-center gap-2 text-xl">
+            <EyeOff className="size-4 text-primary" /> Privacy & Notifications
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Manage how you view others and what notifications you receive.
+          </p>
+        </div>
+        <Link 
+          to="/profile/views" 
+          className="inline-flex items-center gap-2 rounded-md bg-primary/10 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/20"
+        >
+          <Users className="size-4" /> Who's Viewed My Profile
+        </Link>
+      </div>
+
+      <div className="mt-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label className="text-base">Anonymous Mode</Label>
+            <p className="text-sm text-muted-foreground">
+              When enabled, your profile visits will appear as "Anonymous Visitor" to other users.
+            </p>
+          </div>
+          <Switch 
+            checked={anon} 
+            onCheckedChange={(c) => { setAnon(c); saveSettings(c, noNotif, showScripts); }} 
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label className="text-base">Disable Email Notifications</Label>
+            <p className="text-sm text-muted-foreground">
+              Turn off email notifications when someone views your profile.
+            </p>
+          </div>
+          <Switch 
+            checked={noNotif} 
+            onCheckedChange={(c) => { setNoNotif(c); saveSettings(anon, c, showScripts); }} 
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label className="text-base">Show Scripts on Profile</Label>
+            <p className="text-sm text-muted-foreground">
+              Display the titles and genres of your deposited scripts on your public profile.
+            </p>
+          </div>
+          <Switch 
+            checked={showScripts} 
+            onCheckedChange={(c) => { setShowScripts(c); saveSettings(anon, noNotif, c); }} 
+          />
+        </div>
+      </div>
+    </section>
   );
 }
 

@@ -45,6 +45,9 @@ export function VaultHeader() {
               <Link to="/dashboard" className="text-sm text-muted-foreground hover:text-foreground">
                 Vault
               </Link>
+              <Link to="/people" className="ml-4 text-sm text-muted-foreground hover:text-foreground">
+                Discover
+              </Link>
               {user.role === "admin" && (
                 <Link
                   to="/admin"

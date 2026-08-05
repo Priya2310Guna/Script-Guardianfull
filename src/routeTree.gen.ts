@@ -12,7 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as PeopleRouteImport } from './routes/people'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
+import { Route as ProfileUserIdRouteImport } from './routes/profile.$userId'
+import { Route as ProfileViewsRouteImport } from './routes/profile.views'
 import { Route as ScriptsScriptIdRouteImport } from './routes/scripts.$scriptId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -30,9 +33,24 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PeopleRoute = PeopleRouteImport.update({
+  id: '/people',
+  path: '/people',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VerifyEmailRoute = VerifyEmailRouteImport.update({
   id: '/verify-email',
   path: '/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileUserIdRoute = ProfileUserIdRouteImport.update({
+  id: '/profile/$userId',
+  path: '/profile/$userId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileViewsRoute = ProfileViewsRouteImport.update({
+  id: '/profile/views',
+  path: '/profile/views',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScriptsScriptIdRoute = ScriptsScriptIdRouteImport.update({
@@ -45,14 +63,20 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/dashboard': typeof DashboardRoute
+  '/people': typeof PeopleRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/profile/$userId': typeof ProfileUserIdRoute
+  '/profile/views': typeof ProfileViewsRoute
   '/scripts/$scriptId': typeof ScriptsScriptIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/dashboard': typeof DashboardRoute
+  '/people': typeof PeopleRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/profile/$userId': typeof ProfileUserIdRoute
+  '/profile/views': typeof ProfileViewsRoute
   '/scripts/$scriptId': typeof ScriptsScriptIdRoute
 }
 export interface FileRoutesById {
@@ -60,21 +84,42 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/dashboard': typeof DashboardRoute
+  '/people': typeof PeopleRoute
   '/verify-email': typeof VerifyEmailRoute
+  '/profile/$userId': typeof ProfileUserIdRoute
+  '/profile/views': typeof ProfileViewsRoute
   '/scripts/$scriptId': typeof ScriptsScriptIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/admin' | '/dashboard' | '/verify-email' | '/scripts/$scriptId'
+    | '/'
+    | '/admin'
+    | '/dashboard'
+    | '/people'
+    | '/verify-email'
+    | '/profile/$userId'
+    | '/profile/views'
+    | '/scripts/$scriptId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/dashboard' | '/verify-email' | '/scripts/$scriptId'
+  to:
+    | '/'
+    | '/admin'
+    | '/dashboard'
+    | '/people'
+    | '/verify-email'
+    | '/profile/$userId'
+    | '/profile/views'
+    | '/scripts/$scriptId'
   id:
     | '__root__'
     | '/'
     | '/admin'
     | '/dashboard'
+    | '/people'
     | '/verify-email'
+    | '/profile/$userId'
+    | '/profile/views'
     | '/scripts/$scriptId'
   fileRoutesById: FileRoutesById
 }
@@ -82,7 +127,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   DashboardRoute: typeof DashboardRoute
+  PeopleRoute: typeof PeopleRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
+  ProfileUserIdRoute: typeof ProfileUserIdRoute
+  ProfileViewsRoute: typeof ProfileViewsRoute
   ScriptsScriptIdRoute: typeof ScriptsScriptIdRoute
 }
 
@@ -109,11 +157,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/people': {
+      id: '/people'
+      path: '/people'
+      fullPath: '/people'
+      preLoaderRoute: typeof PeopleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/verify-email': {
       id: '/verify-email'
       path: '/verify-email'
       fullPath: '/verify-email'
       preLoaderRoute: typeof VerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile/$userId': {
+      id: '/profile/$userId'
+      path: '/profile/$userId'
+      fullPath: '/profile/$userId'
+      preLoaderRoute: typeof ProfileUserIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile/views': {
+      id: '/profile/views'
+      path: '/profile/views'
+      fullPath: '/profile/views'
+      preLoaderRoute: typeof ProfileViewsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/scripts/$scriptId': {
@@ -130,7 +199,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   DashboardRoute: DashboardRoute,
+  PeopleRoute: PeopleRoute,
   VerifyEmailRoute: VerifyEmailRoute,
+  ProfileUserIdRoute: ProfileUserIdRoute,
+  ProfileViewsRoute: ProfileViewsRoute,
   ScriptsScriptIdRoute: ScriptsScriptIdRoute,
 }
 export const routeTree = rootRouteImport

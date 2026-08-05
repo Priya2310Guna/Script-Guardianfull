@@ -98,3 +98,43 @@ export const sendHRConfirmationEmail = createServerFn({ method: "POST" })
 
     return { sent: true as const };
   });
+
+export const sendProfileViewEmail = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => z.object({ ownerEmail: z.string().email(), ownerName: z.string(), visitorName: z.string(), visitTime: z.string() }).parse(data))
+  .handler(async ({ data }) => {
+    const lovableKey = process.env.LOVABLE_API_KEY;
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!lovableKey || !resendKey) {
+      return { sent: false as const, reason: "not_configured" as const };
+    }
+
+    const from = process.env.VAULT_EMAIL_FROM ?? "Script Vault <onboarding@resend.dev>";
+    const visitDate = new Date(data.visitTime).toLocaleString();
+
+    const res = await fetch(`${GATEWAY_URL}/emails`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${lovableKey}`,
+        "X-Connection-Api-Key": resendKey,
+      },
+      body: JSON.stringify({
+        from,
+        to: [data.ownerEmail],
+        subject: `Someone viewed your Script Vault profile`,
+        html: `<div style="font-family:Inter,Arial,sans-serif;background:#0e0d0b;padding:32px;color:#f5f1e8;">
+          <h1 style="margin:14px 0 8px;font-size:22px;color:#f5f1e8">Profile View Notification</h1>
+          <p>Hi ${data.ownerName},</p>
+          <p><strong>${data.visitorName}</strong> recently viewed your profile on Script Vault.</p>
+          <p style="font-size:12px;color:#a49c8c">Visit time: ${visitDate}</p>
+        </div>`,
+        text: `Hi ${data.ownerName}, ${data.visitorName} recently viewed your profile on Script Vault at ${visitDate}.`,
+      }),
+    });
+
+    if (!res.ok) {
+      return { sent: false as const, reason: "provider_error" as const };
+    }
+
+    return { sent: true as const };
+  });

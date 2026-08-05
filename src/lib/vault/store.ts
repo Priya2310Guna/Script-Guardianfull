@@ -4,6 +4,7 @@
  * password-derived key. Only a non-reversible narrative index is kept in the
  * clear so cross-account similarity detection can run without exposing scripts.
  */
+import { sendProfileViewEmail } from "../email.functions";
 import {
   aesDecrypt,
   aesEncrypt,
@@ -45,6 +46,22 @@ export type VaultUser = {
   verified: boolean;
   otp: string | null;
   createdAt: string;
+  privacySettings?: {
+    anonymousMode: boolean;
+    disableNotifications: boolean;
+    showScriptsOnProfile?: boolean;
+  };
+  profileInfo?: {
+    profession?: string;
+    location?: string;
+    bio?: string;
+    avatarUrl?: string;
+  };
+  social?: {
+    followers: string[];
+    following: string[];
+    connections: string[];
+  };
 };
 
 export type StoredIndex = {
@@ -108,14 +125,23 @@ export type LoginEvent = {
   agent: string;
 };
 
+export type ProfileView = {
+  id: string;
+  visitorId: string;
+  profileOwnerId: string;
+  timestamp: string;
+  isAnonymous: boolean;
+};
+
 type DB = {
   users: VaultUser[];
   scripts: VaultScript[];
   notifications: NotificationItem[];
   logins: LoginEvent[];
+  profileViews: ProfileView[];
 };
 
-const empty: DB = { users: [], scripts: [], notifications: [], logins: [] };
+const empty: DB = { users: [], scripts: [], notifications: [], logins: [], profileViews: [] };
 
 function read(): DB {
   if (typeof window === "undefined") return empty;
@@ -504,6 +530,153 @@ export function myNotifications() {
   const u = currentUser();
   if (!u) return [];
   return read().notifications.filter((n) => n.userId === u.id);
+}
+
+export function updatePrivacySettings(settings: { anonymousMode: boolean; disableNotifications: boolean; showScriptsOnProfile?: boolean }) {
+  const u = currentUser();
+  if (!u) throw new Error("Not logged in");
+  const db = read();
+  const dbUser = db.users.find(x => x.id === u.id);
+  if (dbUser) {
+    dbUser.privacySettings = settings;
+    write(db);
+  }
+}
+
+export function updateProfileInfo(info: { profession?: string; location?: string; bio?: string; avatarUrl?: string }) {
+  const u = currentUser();
+  if (!u) throw new Error("Not logged in");
+  const db = read();
+  const dbUser = db.users.find(x => x.id === u.id);
+  if (dbUser) {
+    dbUser.profileInfo = { ...dbUser.profileInfo, ...info };
+    write(db);
+  }
+}
+
+export function toggleFollow(targetUserId: string) {
+  const u = currentUser();
+  if (!u) throw new Error("Not logged in");
+  if (u.id === targetUserId) return;
+  const db = read();
+  const me = db.users.find(x => x.id === u.id);
+  const target = db.users.find(x => x.id === targetUserId);
+  if (!me || !target) return;
+  
+  if (!me.social) me.social = { followers: [], following: [], connections: [] };
+  if (!target.social) target.social = { followers: [], following: [], connections: [] };
+  
+  const isFollowing = me.social.following.includes(targetUserId);
+  if (isFollowing) {
+    me.social.following = me.social.following.filter(id => id !== targetUserId);
+    target.social.followers = target.social.followers.filter(id => id !== u.id);
+  } else {
+    me.social.following.push(targetUserId);
+    target.social.followers.push(u.id);
+    
+    if (!target.privacySettings?.disableNotifications) {
+      db.notifications.unshift({
+        id: uid(),
+        userId: target.id,
+        message: `${me.name} started following you.`,
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+    }
+  }
+  write(db);
+  return !isFollowing;
+}
+
+export function toggleConnect(targetUserId: string) {
+  const u = currentUser();
+  if (!u) throw new Error("Not logged in");
+  if (u.id === targetUserId) return;
+  const db = read();
+  const me = db.users.find(x => x.id === u.id);
+  const target = db.users.find(x => x.id === targetUserId);
+  if (!me || !target) return;
+  
+  if (!me.social) me.social = { followers: [], following: [], connections: [] };
+  if (!target.social) target.social = { followers: [], following: [], connections: [] };
+  
+  const isConnected = me.social.connections.includes(targetUserId);
+  if (isConnected) {
+    me.social.connections = me.social.connections.filter(id => id !== targetUserId);
+    target.social.connections = target.social.connections.filter(id => id !== u.id);
+  } else {
+    me.social.connections.push(targetUserId);
+    target.social.connections.push(u.id);
+    
+    if (!target.privacySettings?.disableNotifications) {
+      db.notifications.unshift({
+        id: uid(),
+        userId: target.id,
+        message: `${me.name} connected with you.`,
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+    }
+  }
+  write(db);
+  return !isConnected;
+}
+
+export async function recordProfileView(visitorId: string, profileOwnerId: string) {
+  if (visitorId === profileOwnerId) return;
+  const db = read();
+  const visitor = db.users.find(u => u.id === visitorId);
+  const owner = db.users.find(u => u.id === profileOwnerId);
+  
+  if (!visitor || !owner) return;
+
+  const isAnonymous = visitor.privacySettings?.anonymousMode ?? false;
+  const now = new Date();
+
+  const recentView = db.profileViews?.find(
+    v => v.visitorId === visitorId && v.profileOwnerId === profileOwnerId && 
+    (now.getTime() - new Date(v.timestamp).getTime()) < 24 * 60 * 60 * 1000
+  );
+
+  if (!db.profileViews) db.profileViews = [];
+
+  const viewId = uid();
+  db.profileViews.unshift({
+    id: viewId,
+    visitorId,
+    profileOwnerId,
+    timestamp: now.toISOString(),
+    isAnonymous
+  });
+
+  if (!recentView && !owner.privacySettings?.disableNotifications) {
+    const visitorName = isAnonymous ? "Someone" : visitor.name;
+    db.notifications.unshift({
+      id: uid(),
+      userId: owner.id,
+      message: `${visitorName} viewed your profile.`,
+      createdAt: now.toISOString(),
+      read: false,
+    });
+    
+    sendProfileViewEmail({
+      data: {
+        ownerEmail: owner.email,
+        ownerName: owner.name,
+        visitorName: visitorName,
+        visitTime: now.toISOString()
+      }
+    }).catch(console.error);
+  }
+
+  write(db);
+}
+
+export function getProfileViews() {
+  const u = currentUser();
+  if (!u) return [];
+  const db = read();
+  return (db.profileViews || []).filter(v => v.profileOwnerId === u.id);
 }
 
 /* ---------------- admin ---------------- */
