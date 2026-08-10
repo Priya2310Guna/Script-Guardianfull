@@ -270,12 +270,15 @@ function DepositForm() {
 
   async function onFile(file: File | undefined) {
     if (!file) return;
+    const toastId = toast.loading(`Reading ${file.name}... (OCR may take a moment)`);
     try {
       const text = await readScriptFile(file);
       setContent(text);
       setFilename(file.name);
+      toast.dismiss(toastId);
       toast.success(`${file.name} loaded (${text.split(/\s+/).length} words)`);
     } catch (err) {
+      toast.dismiss(toastId);
       toast.error((err as Error).message);
     }
   }
@@ -428,12 +431,11 @@ function DepositForm() {
 
         <div className="space-y-2">
           <Label htmlFor="file" className="text-xs uppercase tracking-wider text-muted-foreground">
-            Script file (TXT, MD, Fountain, PDF, DOCX)
+            Script file (All formats, including images)
           </Label>
           <Input
             id="file"
             type="file"
-            accept=".txt,.md,.fountain,.fdx,.rtf,.pdf,.docx,.doc"
             onChange={(e) => onFile(e.target.files?.[0])}
           />
         </div>

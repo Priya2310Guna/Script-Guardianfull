@@ -26,7 +26,7 @@ function html(code: string, name?: string) {
 }
 
 export const sendVerificationEmail = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => schema.parse(data))
+  .validator((data: unknown) => schema.parse(data))
   .handler(async ({ data }) => {
     const lovableKey = process.env.LOVABLE_API_KEY;
     const resendKey = process.env.RESEND_API_KEY;
@@ -66,7 +66,7 @@ export const sendVerificationEmail = createServerFn({ method: "POST" })
   });
 
 export const sendHRConfirmationEmail = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => z.object({ hrEmail: z.string().email(), applicantName: z.string() }).parse(data))
+  .validator((data: unknown) => z.object({ hrEmail: z.string().email(), applicantName: z.string() }).parse(data))
   .handler(async ({ data }) => {
     const lovableKey = process.env.LOVABLE_API_KEY;
     const resendKey = process.env.RESEND_API_KEY;
@@ -100,7 +100,7 @@ export const sendHRConfirmationEmail = createServerFn({ method: "POST" })
   });
 
 export const sendProfileViewEmail = createServerFn({ method: "POST" })
-  .inputValidator((data: unknown) => z.object({ ownerEmail: z.string().email(), ownerName: z.string(), visitorName: z.string(), visitTime: z.string() }).parse(data))
+  .validator((data: unknown) => z.object({ ownerEmail: z.string().email(), ownerName: z.string(), visitorName: z.string(), visitTime: z.string() }).parse(data))
   .handler(async ({ data }) => {
     const lovableKey = process.env.LOVABLE_API_KEY;
     const resendKey = process.env.RESEND_API_KEY;

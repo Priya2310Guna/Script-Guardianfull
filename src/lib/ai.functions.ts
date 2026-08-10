@@ -27,7 +27,7 @@ export type AiNarrativeReport = {
 
 /** Narrative-level review of a script and its detected overlaps, via Lovable AI. */
 export const reviewNarrative = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => Input.parse(input))
+  .validator((input: unknown) => Input.parse(input))
   .handler(async ({ data }): Promise<AiNarrativeReport> => {
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) return { summary: "", suggestions: [], aiPowered: false };
