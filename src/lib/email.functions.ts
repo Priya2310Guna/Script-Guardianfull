@@ -138,3 +138,59 @@ export const sendProfileViewEmail = createServerFn({ method: "POST" })
 
     return { sent: true as const };
   });
+
+export const sendAccessGrantedEmail = createServerFn({ method: "POST" })
+  .validator((data: unknown) =>
+    z.object({
+      email: z.string().email(),
+      name: z.string(),
+      scriptName: z.string(),
+      permission: z.string(),
+      startTime: z.string(),
+      expiryTime: z.string(),
+      url: z.string().url(),
+    }).parse(data)
+  )
+  .handler(async ({ data }) => {
+    const lovableKey = process.env.LOVABLE_API_KEY;
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!lovableKey || !resendKey) {
+      return { sent: false as const, reason: "not_configured" as const };
+    }
+
+    const from = process.env.VAULT_EMAIL_FROM ?? "Script Vault <onboarding@resend.dev>";
+    const startDate = new Date(data.startTime).toLocaleString();
+    const endDate = new Date(data.expiryTime).toLocaleString();
+
+    const res = await fetch(`${GATEWAY_URL}/emails`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${lovableKey}`,
+        "X-Connection-Api-Key": resendKey,
+      },
+      body: JSON.stringify({
+        from,
+        to: [data.email],
+        subject: `Access Granted: ${data.scriptName}`,
+        html: `<div style="font-family:Inter,Arial,sans-serif;background:#0e0d0b;padding:32px;color:#f5f1e8;">
+          <h1 style="margin:14px 0 8px;font-size:22px;color:#f5f1e8">Script Access Granted</h1>
+          <p>Hi ${data.name},</p>
+          <p>You have been granted <strong>${data.permission}</strong> access to the script: <strong>${data.scriptName}</strong>.</p>
+          <p>This access is valid during the following period:</p>
+          <ul>
+            <li><strong>Start:</strong> ${startDate}</li>
+            <li><strong>Expiry:</strong> ${endDate}</li>
+          </ul>
+          <p>You can view the script here: <a href="${data.url}" style="color:#c9a227;">${data.url}</a></p>
+        </div>`,
+        text: `Hi ${data.name},\n\nYou have been granted ${data.permission} access to the script: ${data.scriptName}.\n\nAccess Period:\nStart: ${startDate}\nExpiry: ${endDate}\n\nView the script here: ${data.url}`,
+      }),
+    });
+
+    if (!res.ok) {
+      return { sent: false as const, reason: "provider_error" as const };
+    }
+
+    return { sent: true as const };
+  });

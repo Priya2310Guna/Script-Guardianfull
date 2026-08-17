@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from "react";
 import { ArrowLeft, User as UserIcon, MapPin, Briefcase, Mail, UserPlus, ShieldCheck, FileText } from "lucide-react";
 import { VaultHeader } from "@/components/vault/VaultHeader";
 import { useVaultSession } from "@/hooks/use-vault-session";
-import { getDb, recordProfileView, toggleFollow, toggleConnect, type VaultUser, type VaultScript } from "@/lib/vault/store";
+import { getDb, recordProfileView, toggleFollow, toggleConnect, requestProfileAccess, checkAccessStatus, type VaultUser, type VaultScript } from "@/lib/vault/store";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ function ProfilePage() {
   const [publicScripts, setPublicScripts] = useState<VaultScript[]>([]);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [accessStatus, setAccessStatus] = useState<string | null>(null);
   const navigate = useNavigate();
   const [_, forceUpdate] = useState(0);
 
@@ -31,7 +32,10 @@ function ProfilePage() {
     const found = db.users.find((u) => u.id === userId);
     setProfile(found ?? null);
     
-    if (found?.privacySettings?.showScriptsOnProfile) {
+    const status = checkAccessStatus(userId);
+    setAccessStatus(status);
+    
+    if (found?.privacySettings?.showScriptsOnProfile || status === "approved") {
       setPublicScripts(db.scripts.filter(s => s.ownerId === userId));
     } else {
       setPublicScripts([]);
@@ -62,6 +66,17 @@ function ProfilePage() {
     const connected = toggleConnect(profile.id);
     setIsConnected(connected ?? false);
     forceUpdate(n => n + 1);
+  }
+
+  function handleRequestAccess() {
+    if (!profile) return;
+    try {
+      requestProfileAccess(profile.id);
+      setAccessStatus("pending");
+      forceUpdate(n => n + 1);
+    } catch (e: any) {
+      console.error(e.message);
+    }
   }
 
   return (
@@ -135,17 +150,17 @@ function ProfilePage() {
               </div>
             )}
 
-            {profile.privacySettings?.showScriptsOnProfile ? (
+            {profile.privacySettings?.showScriptsOnProfile || accessStatus === "approved" ? (
               <div className="rounded-xl border border-border/70 bg-card p-8">
                 <h2 className="flex items-center gap-2 text-xl font-semibold mb-6">
-                  <ShieldCheck className="size-5 text-primary" /> Public Vault Scripts
+                  <ShieldCheck className="size-5 text-primary" /> {accessStatus === "approved" ? "Private Vault Scripts (Access Granted)" : "Public Vault Scripts"}
                 </h2>
                 {publicScripts.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No scripts are publicly listed yet.</p>
+                  <p className="text-muted-foreground text-sm">No scripts are listed yet.</p>
                 ) : (
                   <div className="grid gap-4 sm:grid-cols-2">
                     {publicScripts.map(script => (
-                      <div key={script.id} className="rounded-lg border border-border/70 p-4">
+                      <Link to="/scripts/$scriptId" params={{ scriptId: script.id }} key={script.id} className="block rounded-lg border border-border/70 p-4 transition-colors hover:border-primary/50">
                         <h3 className="font-medium text-lg truncate">{script.title}</h3>
                         <p className="mt-1 text-xs text-muted-foreground">{script.genre}</p>
                         <p className="mt-2 text-sm line-clamp-2 text-muted-foreground">{script.logline}</p>
@@ -153,7 +168,7 @@ function ProfilePage() {
                           <Badge variant="outline" className="text-[10px] uppercase tracking-wider">{script.versions.length} versions</Badge>
                           <span className="text-[10px] text-muted-foreground flex items-center gap-1"><FileText className="size-3" /> Sealed</span>
                         </div>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 )}
@@ -161,7 +176,14 @@ function ProfilePage() {
             ) : (
               <div className="rounded-xl border border-border/70 bg-card p-8 text-center">
                 <ShieldCheck className="size-8 mx-auto text-muted-foreground mb-3" />
-                <p className="text-muted-foreground">This user's scripts are kept private in their vault.</p>
+                <p className="text-muted-foreground mb-4">This user's scripts are kept private in their vault.</p>
+                {user.id !== profile.id && (
+                  accessStatus === "pending" ? (
+                    <Button variant="secondary" disabled>Request Pending</Button>
+                  ) : (
+                    <Button onClick={handleRequestAccess}>Request Access</Button>
+                  )
+                )}
               </div>
             )}
           </div>

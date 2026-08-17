@@ -22,8 +22,10 @@ import {
   getScript,
   revealVersion,
   verifyVersion,
+  checkAccessStatus,
   type ScriptVersion,
   type VaultScript,
+  type AccessGrant,
 } from "@/lib/vault/store";
 
 export const Route = createFileRoute("/scripts/$scriptId")({
@@ -63,6 +65,31 @@ function ScriptDetail() {
   }, [scriptId]);
 
   if (!script || !user) return null;
+
+  const isOwner = user.id === script.ownerId;
+  const activeGrant = script.accessGrants?.find((g) => {
+    if (g.email.toLowerCase() !== user.email.toLowerCase()) return false;
+    const now = new Date();
+    const start = new Date(g.startTime);
+    const end = new Date(g.expiryTime);
+    return now >= start && now <= end;
+  });
+  
+  const hasProfileAccess = checkAccessStatus(script.ownerId) === "approved";
+
+  if (!isOwner && !activeGrant && !hasProfileAccess) {
+    return (
+      <div className="min-h-screen grain">
+        <VaultHeader />
+        <main className="mx-auto max-w-5xl px-5 py-12 text-center">
+          <h1 className="text-3xl text-destructive mt-10">Access Denied</h1>
+          <p className="mt-4 text-muted-foreground">You do not have permission to view this script or your access has expired.</p>
+          <Link to="/dashboard" className="mt-8 inline-block"><Button>Back to Vault</Button></Link>
+        </main>
+      </div>
+    );
+  }
+
   const version = script.versions.find((v) => v.id === versionId) ?? script.versions[0];
 
   return (
@@ -136,7 +163,7 @@ function ScriptDetail() {
               ))}
           </TabsContent>
           <TabsContent value="content" className="mt-6">
-            <DecryptPanel version={version} />
+            <DecryptPanel version={version} sharedContent={activeGrant?.sharedContent} hasProfileAccess={hasProfileAccess} isOwner={isOwner} />
           </TabsContent>
         </Tabs>
       </main>
@@ -328,11 +355,19 @@ ${a.aiSummary ? `<h3>AI narrative assessment</h3><p>${a.aiSummary}</p>` : ""}
   );
 }
 
-function DecryptPanel({ version }: { version: ScriptVersion }) {
+function DecryptPanel({ version, sharedContent, hasProfileAccess, isOwner }: { version: ScriptVersion; sharedContent?: string; hasProfileAccess?: boolean; isOwner?: boolean }) {
   const [text, setText] = useState<string | null>(null);
 
   async function toggle() {
     if (text) return setText(null);
+    if (sharedContent) {
+      setText(sharedContent);
+      return;
+    }
+    if (hasProfileAccess && !isOwner) {
+      toast.error("Profile access only grants metadata viewing. The owner must grant you direct script access to decrypt the file.");
+      return;
+    }
     try {
       setText(await revealVersion(version));
     } catch (err) {

@@ -96,6 +96,16 @@ export type ScriptVersion = {
   analysis: AnalysisResult;
 };
 
+export type AccessGrant = {
+  id: string;
+  name: string;
+  email: string;
+  permission: "view" | "edit";
+  startTime: string;
+  expiryTime: string;
+  sharedContent: string;
+};
+
 export type VaultScript = {
   id: string;
   ownerId: string;
@@ -105,6 +115,7 @@ export type VaultScript = {
   logline: string;
   createdAt: string;
   versions: ScriptVersion[];
+  accessGrants?: AccessGrant[];
 };
 
 export type NotificationItem = {
@@ -133,15 +144,24 @@ export type ProfileView = {
   isAnonymous: boolean;
 };
 
+export type AccessRequest = {
+  id: string;
+  requesterId: string;
+  targetUserId: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+};
+
 type DB = {
   users: VaultUser[];
   scripts: VaultScript[];
   notifications: NotificationItem[];
   logins: LoginEvent[];
   profileViews: ProfileView[];
+  accessRequests?: AccessRequest[];
 };
 
-const empty: DB = { users: [], scripts: [], notifications: [], logins: [], profileViews: [] };
+const empty: DB = { users: [], scripts: [], notifications: [], logins: [], profileViews: [], accessRequests: [] };
 
 function read(): DB {
   if (typeof window === "undefined") return empty;
@@ -483,6 +503,28 @@ export async function addScriptVersion(args: {
   return { script, version };
 }
 
+export function grantScriptAccess(
+  scriptId: string,
+  grant: Omit<AccessGrant, "id">,
+) {
+  const db = read();
+  const script = db.scripts.find((s) => s.id === scriptId);
+  if (!script) throw new Error("Script not found");
+
+  if (!script.accessGrants) {
+    script.accessGrants = [];
+  }
+
+  const accessGrant: AccessGrant = {
+    id: uid(),
+    ...grant,
+  };
+
+  script.accessGrants.push(accessGrant);
+  write(db);
+  return accessGrant;
+}
+
 export function listMyScripts() {
   const u = currentUser();
   if (!u) return [];
@@ -719,4 +761,95 @@ export function setUserRole(userId: string, role: Role) {
   const u = db.users.find((x) => x.id === userId);
   if (u) u.role = role;
   write(db);
+}
+
+/* ---------------- access requests ---------------- */
+
+export function requestProfileAccess(targetUserId: string) {
+  const u = currentUser();
+  if (!u) throw new Error("Not logged in");
+  const db = read();
+  
+  if (!db.accessRequests) db.accessRequests = [];
+  
+  const existing = db.accessRequests.find(r => r.requesterId === u.id && r.targetUserId === targetUserId);
+  if (existing) {
+    if (existing.status === "pending") throw new Error("Request already pending");
+    if (existing.status === "approved") return existing;
+    existing.status = "pending";
+    existing.createdAt = new Date().toISOString();
+  } else {
+    db.accessRequests.push({
+      id: uid(),
+      requesterId: u.id,
+      targetUserId,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  const target = db.users.find(x => x.id === targetUserId);
+  if (target && !target.privacySettings?.disableNotifications) {
+    db.notifications.unshift({
+      id: uid(),
+      userId: target.id,
+      message: `${u.name} requested access to your private scripts.`,
+      createdAt: new Date().toISOString(),
+      read: false,
+    });
+  }
+  
+  write(db);
+}
+
+export function approveAccessRequest(requestId: string) {
+  const u = currentUser();
+  if (!u) throw new Error("Not logged in");
+  const db = read();
+  if (!db.accessRequests) return;
+  const req = db.accessRequests.find(r => r.id === requestId);
+  if (req && req.targetUserId === u.id) {
+    req.status = "approved";
+    const requester = db.users.find(x => x.id === req.requesterId);
+    if (requester && !requester.privacySettings?.disableNotifications) {
+      db.notifications.unshift({
+        id: uid(),
+        userId: requester.id,
+        message: `${u.name} approved your access request.`,
+        createdAt: new Date().toISOString(),
+        read: false,
+      });
+    }
+    write(db);
+  }
+}
+
+export function rejectAccessRequest(requestId: string) {
+  const u = currentUser();
+  if (!u) throw new Error("Not logged in");
+  const db = read();
+  if (!db.accessRequests) return;
+  const req = db.accessRequests.find(r => r.id === requestId);
+  if (req && req.targetUserId === u.id) {
+    req.status = "rejected";
+    write(db);
+  }
+}
+
+export function getPendingAccessRequests() {
+  const u = currentUser();
+  if (!u) return [];
+  const db = read();
+  return (db.accessRequests || []).filter(r => r.targetUserId === u.id && r.status === "pending").map(req => {
+    const requester = db.users.find(x => x.id === req.requesterId);
+    return { ...req, requesterName: requester?.name || "Unknown User", requesterEmail: requester?.email || "" };
+  });
+}
+
+export function checkAccessStatus(targetUserId: string) {
+  const u = currentUser();
+  if (!u) return null;
+  const db = read();
+  const req = (db.accessRequests || []).find(r => r.requesterId === u.id && r.targetUserId === targetUserId);
+  return req ? req.status : null;
 }

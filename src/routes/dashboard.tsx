@@ -22,15 +22,20 @@ import { readScriptFile } from "@/lib/vault/file";
 import {
   addScriptVersion,
   analyzeAgainstVault,
+  grantScriptAccess,
   isUnlocked,
   listMyScripts,
   subscribe,
   updatePrivacySettings,
   updateProfileInfo,
+  getPendingAccessRequests,
+  approveAccessRequest,
+  rejectAccessRequest,
   type VaultUser,
   type AnalysisResult,
 } from "@/lib/vault/store";
 import { reviewNarrative } from "@/lib/ai.functions";
+import { sendAccessGrantedEmail } from "@/lib/email.functions";
 import { fingerprintShort } from "@/lib/vault/crypto";
 
 export const Route = createFileRoute("/dashboard")({
@@ -144,8 +149,40 @@ function Dashboard() {
         
         <ProfileSettingsPanel user={user} />
         <PrivacySettingsPanel user={user} />
+        <AccessRequestsPanel />
       </main>
     </div>
+  );
+}
+
+function AccessRequestsPanel() {
+  const [requests, setRequests] = useState(getPendingAccessRequests());
+
+  useEffect(() => subscribe(() => setRequests(getPendingAccessRequests())), []);
+
+  if (requests.length === 0) return null;
+
+  return (
+    <section className="mt-12 rounded-xl border border-border/70 bg-card p-7">
+      <h2 className="flex items-center gap-2 text-xl mb-6">
+        <Users className="size-4 text-primary" /> Incoming Access Requests
+      </h2>
+      <div className="space-y-4">
+        {requests.map(req => (
+          <div key={req.id} className="flex items-center justify-between rounded-lg border border-border/50 p-4">
+            <div>
+              <p className="font-medium">{req.requesterName}</p>
+              <p className="text-sm text-muted-foreground">{req.requesterEmail}</p>
+              <p className="text-xs text-muted-foreground mt-1">Requested on {new Date(req.createdAt).toLocaleDateString()}</p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => { approveAccessRequest(req.id); toast.success("Access approved"); }}>Approve</Button>
+              <Button size="sm" variant="outline" onClick={() => { rejectAccessRequest(req.id); toast.success("Access rejected"); }}>Reject</Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -268,6 +305,14 @@ function DepositForm() {
   const scripts = listMyScripts();
   const [scriptId, setScriptId] = useState("new");
 
+  // Access Management State
+  const [grantAccess, setGrantAccess] = useState(false);
+  const [grantName, setGrantName] = useState("");
+  const [grantEmail, setGrantEmail] = useState("");
+  const [grantPermission, setGrantPermission] = useState("view");
+  const [grantStartTime, setGrantStartTime] = useState("");
+  const [grantExpiryTime, setGrantExpiryTime] = useState("");
+
   async function onFile(file: File | undefined) {
     if (!file) return;
     const toastId = toast.loading(`Reading ${file.name}... (OCR may take a moment)`);
@@ -351,6 +396,37 @@ function DepositForm() {
 
       setProgress(100);
       toast.success("Script sealed and signed");
+
+      if (grantAccess && grantName && grantEmail && grantStartTime && grantExpiryTime) {
+        setStage("Granting access and sending email");
+        try {
+          grantScriptAccess(script.id, {
+            name: grantName,
+            email: grantEmail,
+            permission: grantPermission as "view" | "edit",
+            startTime: new Date(grantStartTime).toISOString(),
+            expiryTime: new Date(grantExpiryTime).toISOString(),
+            sharedContent: content,
+          });
+          
+          const scriptUrl = `${window.location.origin}/scripts/${script.id}`;
+          await sendAccessGrantedEmail({
+            data: {
+              email: grantEmail,
+              name: grantName,
+              scriptName: script.title,
+              permission: grantPermission,
+              startTime: grantStartTime,
+              expiryTime: grantExpiryTime,
+              url: scriptUrl,
+            }
+          });
+          toast.success(`Access granted to ${grantName}`);
+        } catch (grantErr) {
+          toast.error("Failed to grant access: " + (grantErr as Error).message);
+        }
+      }
+
       navigate({ to: "/scripts/$scriptId", params: { scriptId: script.id } });
     } catch (err) {
       toast.error((err as Error).message);
@@ -460,6 +536,50 @@ function DepositForm() {
             {content.trim() ? content.trim().split(/\s+/).length : 0} words · encrypted before
             storage
           </p>
+        </div>
+
+        <div className="rounded-lg border border-border/70 p-4 space-y-4 bg-accent/10">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Access Management</Label>
+              <p className="text-xs text-muted-foreground">Grant another person temporary access to this script.</p>
+            </div>
+            <Switch checked={grantAccess} onCheckedChange={setGrantAccess} />
+          </div>
+          
+          {grantAccess && (
+            <div className="grid gap-4 pt-4 border-t border-border/50">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Recipient Name</Label>
+                  <Input value={grantName} onChange={e => setGrantName(e.target.value)} placeholder="Jane Doe" required={grantAccess} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Recipient Email</Label>
+                  <Input type="email" value={grantEmail} onChange={e => setGrantEmail(e.target.value)} placeholder="jane@example.com" required={grantAccess} />
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Permission</Label>
+                  <Select value={grantPermission} onValueChange={setGrantPermission}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="view">View Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Start Time</Label>
+                  <Input type="datetime-local" value={grantStartTime} onChange={e => setGrantStartTime(e.target.value)} required={grantAccess} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Expiry Time</Label>
+                  <Input type="datetime-local" value={grantExpiryTime} onChange={e => setGrantExpiryTime(e.target.value)} required={grantAccess} />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {busy && (
